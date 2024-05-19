@@ -1,4 +1,4 @@
-import pandas as pd
+from datetime import datetime
 import psycopg2
 
 
@@ -17,12 +17,16 @@ def get_current_predictions_from_db():
     )
     cur = conn.cursor()
 
-    # SQL-запрос для извлечения данных
-    extract_query = """
+    # Получаем текущий час
+    current_hour = datetime.now().hour
+
+    # SQL-запрос для извлечения данных с условием по текущему часу
+    extract_query = f"""
        SELECT c.col_2, c.col_3, p.prediction_value
        FROM accidentvisionai.predictions_results p
        JOIN accidentvisionai.coords_and_nearby c
-       ON p.coords_id = c.col_1;
+       ON p.coords_id = c.col_1
+       WHERE EXTRACT(HOUR FROM p.prediction_time) = {current_hour};
        """
 
     cur.execute(extract_query)

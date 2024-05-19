@@ -1,4 +1,3 @@
-from fastapi import FastAPI, HTTPException
 from datetime import datetime
 import psycopg2
 from psycopg2 import OperationalError

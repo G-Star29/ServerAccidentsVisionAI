@@ -235,20 +235,31 @@ def run_async_task():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(scheduled_task())
+    loop.close()
 
 # Настройка планировщика
 scheduler = BackgroundScheduler()
 scheduler.add_job(run_async_task, trigger=IntervalTrigger(hours=1))
 scheduler.start()
 
+# Запуск асинхронной задачи сразу после настройки планировщика
+async def startup_event():
+    asyncio.create_task(scheduled_task())
+
+@app.on_event("startup")
+async def on_startup():
+    await startup_event()
+
 # Закрытие планировщика при завершении работы приложения
 @app.on_event("shutdown")
 def shutdown_event():
     scheduler.shutdown()
 
+
 @app.get('/current-situation', response_model=dict)
 async def predict():
-    return {'hello': 'world'}
+    dict_of_current_state = get_current_predictions_from_db()
+    return dict_of_current_state
 
 
 @app.get("/check_predictions/")

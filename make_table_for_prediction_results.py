@@ -1,8 +1,5 @@
-import pandas as pd
 import psycopg2
-import joblib
-import numpy as np
-from datetime import datetime
+
 
 dbname = 'accidentsvisionai'
 user = 'postgres'
@@ -19,7 +16,9 @@ conn = psycopg2.connect(
 cur = conn.cursor()
 
 create_predictions_results_table_query = create_table_query = """
-CREATE TABLE IF NOT EXISTS accidentvisionai.predictions_results (
+DROP TABLE IF EXISTS accidentvisionai.predictions_results;
+
+CREATE TABLE accidentvisionai.predictions_results (
     prediction_id SERIAL PRIMARY KEY,
     coords_id INTEGER REFERENCES accidentvisionai.coords_and_nearby(col_1),
     prediction_date DATE,
