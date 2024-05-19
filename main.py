@@ -16,6 +16,7 @@ from test_merge_to_predictions import merge_to_predictions
 from make_prediction import make_prediction_from_latest_model
 from get_current_predictions_from_db import get_current_predictions_from_db
 from check_records_for_current_date_and_hour import check_records_for_current_date_and_hour
+from PrepareDataForClient import PrepareDataForClient
 
 app = FastAPI()
 
@@ -273,8 +274,8 @@ def shutdown_event():
 @app.get('/current-situation', response_model=dict)
 async def predict():
     dict_of_current_state = get_current_predictions_from_db()
+    dict_of_current_state = PrepareDataForClient(dict_of_current_state)
     return dict_of_current_state
-
 
 @app.get("/check_predictions/")
 async def check_predictions():
