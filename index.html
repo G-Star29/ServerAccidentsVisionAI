@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yandex Map with Predictions</title>
+    <script src="https://api-maps.yandex.ru/2.1/?lang=en_RU" type="text/javascript"></script>
+    <style>
+        #map {
+            width: 100%;
+            height: 600px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Coordinates and Predictions on Yandex Map</h1>
+    <div id="map"></div>
+    <script>
+        async function fetchCoordinatesAndPredictions() {
+            const response = await fetch('http://127.0.0.1:8000/current-situation');
+            return await response.json();
+        }
+
+        function initMap(coordinatesAndPredictions) {
+            const map = new ymaps.Map("map", {
+                center: [55.012889, 82.950335], // Центр карты (Москва)
+                zoom: 10
+            });
+
+            for (const [coords, prediction] of Object.entries(coordinatesAndPredictions)) {
+                const [latitude, longitude] = JSON.parse(coords);
+                const placemark = new ymaps.Placemark([latitude, longitude], {
+                    balloonContent: `Prediction: ${prediction}`
+                });
+
+                map.geoObjects.add(placemark);
+            }
+        }
+
+        ymaps.ready(async function () {
+            const coordinatesAndPredictions = await fetchCoordinatesAndPredictions();
+            initMap(coordinatesAndPredictions);
+        });
+    </script>
+</body>
+</html>
