@@ -1,6 +1,7 @@
 # app/main.py
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -18,6 +19,19 @@ from check_records_for_current_date_and_hour import check_records_for_current_da
 
 app = FastAPI()
 
+origins = [
+    "http://localhost:63342",
+    "http://127.0.0.1:8000",
+    # Добавьте сюда любые другие разрешенные источники
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Определение модели данных для запроса
 class WeatherData(BaseModel):
