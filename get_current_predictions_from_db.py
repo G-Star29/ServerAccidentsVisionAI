@@ -32,11 +32,9 @@ def get_current_predictions_from_db():
     cur.execute(extract_query)
     extracted_data = cur.fetchall()
 
-    # Закрытие соединения
     cur.close()
     conn.close()
 
-    # Преобразование данных в словарь
     extracted_dict = {(row[0], row[1]): row[2] for row in extracted_data}
 
     return extracted_dict

@@ -148,4 +148,4 @@ def merge_to_predictions(data_of_current_state):
     cur.close()
     conn.close()
 
-    print("Table predictions has been populated with data based on coords_and_nearby.")
+    print("[DATA MERGE] Таблица предсказаний была заполнена данными на основе coords_and_nearby.")

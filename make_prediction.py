@@ -1,6 +1,5 @@
 import pandas as pd
 import psycopg2
-from psycopg2 import sql
 import joblib
 import numpy as np
 from datetime import datetime
@@ -32,9 +31,9 @@ def insert_into_indications_table(cur, data_values):
     # Проверка соответствия количества данных и плейсхолдеров
     num_placeholders = insert_indications_query.count('%s')
     if len(data_values) != num_placeholders:
-        print(f"Количество данных: {len(data_values)}")
-        print(f"Количество плейсхолдеров: {num_placeholders}")
-        raise ValueError("Количество данных не соответствует количеству плейсхолдеров в запросе")
+        print(f"[PREDICTION] Количество данных: {len(data_values)}")
+        print(f"[PREDICTION] Количество плейсхолдеров: {num_placeholders}")
+        raise ValueError("[PREDICTION] Количество данных не соответствует количеству плейсхолдеров в запросе")
 
 
     cur.execute(insert_indications_query, data_values)
@@ -43,12 +42,13 @@ def insert_into_indications_table(cur, data_values):
 
 
 def make_prediction_from_latest_model():
+    global prediction_date, prediction_time
     loaded_model = joblib.load('classifiers/stacking_classifier_model.pkl')
     loaded_kmeans = joblib.load('kmeans/kmeans_model.pkl')
     loaded_scaler = joblib.load('scaler/scaler.pkl')
     loaded_ohe = joblib.load('OneHotEncoder/onehotencoder.pkl')
 
-    print("Model loaded successfully.")
+    print("[PREDICTION] Загружена последняя модель")
 
     # Параметры подключения
     dbname = 'accidentsvisionai'
@@ -104,16 +104,15 @@ def make_prediction_from_latest_model():
 
     merged_df_for_results = merged_df.copy()
 
-    print(merged_df.head())
     merged_df.rename(columns=columns_dict, inplace=True)
     # Извлечение признаков для предсказания
     X = merged_df
     X.drop('id', axis=1, inplace=True)
     X.dropna(inplace=True)
 
-    # Проверяем, что есть данные для кластеризации
+
     if X.shape[0] == 0:
-        print("Нет данных для выполнения кластеризации.")
+        print("[PREDICTION] Ошибка! Кластеризация данных невозможна")
         return
 
     clusters = loaded_kmeans.predict(X[['latitude', 'longitude']])
@@ -126,12 +125,14 @@ def make_prediction_from_latest_model():
 
     # Выполнение предсказаний
     predictions = loaded_model.predict_proba(features_final)
-    print("Predictions made successfully.")
+    print("[PREDICTION] Прогноз cформирован")
 
     insert_query = """
     INSERT INTO accidentvisionai.predictions_results (coords_id, indications_id, prediction_date, prediction_time, prediction_value)
     VALUES (%s, %s, %s, %s, %s)
     """
+
+
 
     for idx, prediction in enumerate(predictions):
         coords_id = int(merged_df_for_results.iloc[idx]['col_1'])  # Преобразование в стандартный тип int
@@ -159,15 +160,14 @@ def make_prediction_from_latest_model():
         ]].tolist()
         indications_id = insert_into_indications_table(cur, data_values)
 
-        print(
-            f"Inserting: coords_id={coords_id}, indications_id={indications_id}, prediction_date={prediction_date}, prediction_time={prediction_time}, prediction_value={prediction_value}")
+       # print( f"Inserting: coords_id={coords_id}, indications_id={indications_id}, prediction_date={
+        # prediction_date}, prediction_time={prediction_time}, prediction_value={prediction_value}")
         cur.execute(insert_query, (coords_id, indications_id, prediction_date, prediction_time, prediction_value))
 
     conn.commit()
-
-    # Закрытие соединения
     cur.close()
     conn.close()
+    print(f"[PREDICTION] Прогноз загружен в БД {prediction_date} {prediction_time}")
 
 
 

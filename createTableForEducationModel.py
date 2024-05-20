@@ -1,12 +1,12 @@
 import psycopg2
 
-
+# Параметры подключения
 dbname = 'accidentsvisionai'
 user = 'postgres'
 password = 'Nikita232398'
 host = 'localhost'
 
-
+# Подключаемся к базе данных PostgreSQL
 conn = psycopg2.connect(
     dbname=dbname,
     user=user,
@@ -17,9 +17,9 @@ cur = conn.cursor()
 
 # Создаем таблицу predictions
 create_predictions_table_query = """
-CREATE TABLE IF NOT EXISTS accidentvisionai.new_indications (
+CREATE TABLE IF NOT EXISTS accidentvisionai.data_for_education_model_table (
     id SERIAL PRIMARY KEY,
-    col_4 INT,
+    coords_id INTEGER REFERENCES accidentvisionai.coords_and_nearby(col_1),
     col_5 INT,
     col_6 INT,
     col_7 INT,
@@ -115,9 +115,7 @@ CREATE TABLE IF NOT EXISTS accidentvisionai.new_indications (
     col_152 INT,
     col_153 INT,
     col_154 INT,
-    col_155 BOOLEAN,
-    coords_and_nearby INT,
-    FOREIGN KEY (coords_and_nearby) REFERENCES accidentvisionai.coords_and_nearby_new(col_1)
+    col_155 BOOLEAN
 );
 """
 

@@ -21,7 +21,7 @@ cur.execute("SELECT * FROM accidentvisionai.columns_name_table")
 columns_name_table = dict(cur.fetchall())
 
 # Загружаем данные из CSV файла
-output_df = pd.read_csv('output_modified_test_final.csv')
+output_df = pd.read_csv('data/csv/output_modified_test_final.csv')
 
 # Пример данных для вставки (только для формирования структуры)
 data_for_return = {

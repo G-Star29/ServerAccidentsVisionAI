@@ -36,7 +36,6 @@ def PrepareDataForClient(data):
     coords = np.array(coords)
     probs = np.array(probs)
 
-    # Убедиться, что нет NaN в координатах
     if np.isnan(coords).any():
         raise ValueError("Found NaN in coordinates array")
 

@@ -1,5 +1,3 @@
-# app/main.py
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -9,7 +7,6 @@ from apscheduler.triggers.interval import IntervalTrigger
 import asyncio
 import requests
 
-# Импортируем ваши функции из других модулей
 from data_time_prepare import is_current_time_in_twilight
 from data_time_binary import get_time_binary
 from test_merge_to_predictions import merge_to_predictions
@@ -17,13 +14,14 @@ from make_prediction import make_prediction_from_latest_model
 from get_current_predictions_from_db import get_current_predictions_from_db
 from check_records_for_current_date_and_hour import check_records_for_current_date_and_hour
 from PrepareDataForClient import PrepareDataForClient
+from parser.parserNewDataFromGIBDD import try_to_parse_new_data_from_gibdd
 
 app = FastAPI()
 
 origins = [
     "http://localhost:63342",
     "http://127.0.0.1:8000",
-    # Добавьте сюда любые другие разрешенные источники
+
 ]
 
 app.add_middleware(
@@ -33,6 +31,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Определение модели данных для запроса
 class WeatherData(BaseModel):
@@ -51,6 +50,7 @@ def get_current_weather_from_api():
 async def make_prediction(data_of_current_state):
     merge_to_predictions(data_of_current_state)
     make_prediction_from_latest_model()
+
 
 def determine_lighting_state(current_time):
     current_month = current_time.month
@@ -90,7 +90,8 @@ def determine_road_condition(data_weather: dict):
     snow = data_weather["snowfall"]
     humidity = data_weather["relative_humidity_2m"]
     weather_code = data_weather["weather_code"]
-    road_surface_conditions = {'is_dusty': 0, 'is_chemical': 0, 'is_snowy': 0, 'is_icy_conditions': 0, 'is_wet': 0, 'is_dry': 0}
+    road_surface_conditions = {'is_dusty': 0, 'is_chemical': 0, 'is_snowy': 0, 'is_icy_conditions': 0, 'is_wet': 0,
+                               'is_dry': 0}
     if anti_ice_period:
         return "Обработанное противогололедными материалами"
 
@@ -147,7 +148,6 @@ def get_day_off(date):
 
 
 def prepare_weather_for_prediction(prediction_for_current_time):
-
     formatted_date = datetime.now().strftime('%Y-%m-%d')
     is_day_off = get_day_off(formatted_date)
     data_time = get_time_binary()
@@ -175,7 +175,6 @@ def prepare_weather_for_prediction(prediction_for_current_time):
     temperature_is_above_30 = 0
     temperature_is_below_30 = 0
     current_weather = {}
-
 
     if prediction_for_current_time:
         current_weather = get_current_weather_from_api()
@@ -231,10 +230,7 @@ def prepare_weather_for_prediction(prediction_for_current_time):
         'temperature_is_below_30': temperature_is_below_30,
     }
 
-
-
-    print(data_lighting_state)
-    print(road_surface_conditions)
+    print(f"[DATA] Погодные условия, дорожное покрытие и время успешно загружены")
     data_for_return = {**data_weather, **road_surface_conditions, **data_time}
     return data_for_return
 
@@ -244,6 +240,12 @@ async def scheduled_task():
     data_of_current_state = prepare_weather_for_prediction(prediction_for_current_time=True)
     await make_prediction(data_of_current_state)
 
+
+async def daily_scheduled_task():
+    # try_to_parse_new_data_from_gibdd():
+    print(f"[PARSE] Обучение модели отключено")
+
+
 # Функция для запуска асинхронной задачи из планировщика
 def run_async_task():
     loop = asyncio.new_event_loop()
@@ -251,18 +253,30 @@ def run_async_task():
     loop.run_until_complete(scheduled_task())
     loop.close()
 
+
+def run_daily_async_task():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(daily_scheduled_task())
+    loop.close()
+
+
 # Настройка планировщика
 scheduler = BackgroundScheduler()
 scheduler.add_job(run_async_task, trigger=IntervalTrigger(hours=1))
+scheduler.add_job(run_daily_async_task, trigger=IntervalTrigger(minutes=1))
 scheduler.start()
+
 
 # Запуск асинхронной задачи сразу после настройки планировщика
 async def startup_event():
     asyncio.create_task(scheduled_task())
 
+
 @app.on_event("startup")
 async def on_startup():
     await startup_event()
+
 
 # Закрытие планировщика при завершении работы приложения
 @app.on_event("shutdown")
@@ -275,6 +289,7 @@ async def predict():
     dict_of_current_state = get_current_predictions_from_db()
     dict_of_current_state = PrepareDataForClient(dict_of_current_state)
     return dict_of_current_state
+
 
 @app.get("/check_predictions/")
 async def check_predictions():
