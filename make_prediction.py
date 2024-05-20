@@ -43,7 +43,7 @@ def insert_into_indications_table(cur, data_values):
 
 def make_prediction_from_latest_model():
     global prediction_date, prediction_time
-    loaded_model = joblib.load('classifiers/stacking_classifier_model.pkl')
+    loaded_model = joblib.load('classifiers/stacking_classifier_model_v1.pkl')
     loaded_kmeans = joblib.load('kmeans/kmeans_model.pkl')
     loaded_scaler = joblib.load('scaler/scaler.pkl')
     loaded_ohe = joblib.load('OneHotEncoder/onehotencoder.pkl')

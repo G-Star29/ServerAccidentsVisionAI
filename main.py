@@ -14,7 +14,7 @@ from make_prediction import make_prediction_from_latest_model
 from get_current_predictions_from_db import get_current_predictions_from_db
 from check_records_for_current_date_and_hour import check_records_for_current_date_and_hour
 from PrepareDataForClient import PrepareDataForClient
-from parser.parserNewDataFromGIBDD import try_to_parse_new_data_from_gibdd
+
 
 app = FastAPI()
 
