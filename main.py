@@ -90,8 +90,7 @@ def determine_road_condition(data_weather: dict):
     snow = data_weather["snowfall"]
     humidity = data_weather["relative_humidity_2m"]
     weather_code = data_weather["weather_code"]
-    road_surface_conditions = {'is_chemical': 0, 'is_snowy': 0, 'is_icy_conditions': 0, 'is_wet': 0, 'is_dry': 0,
-                               'is_dusty': 0}
+    road_surface_conditions = {'is_dusty': 0, 'is_chemical': 0, 'is_snowy': 0, 'is_icy_conditions': 0, 'is_wet': 0, 'is_dry': 0}
     if anti_ice_period:
         return "Обработанное противогололедными материалами"
 
@@ -216,18 +215,18 @@ def prepare_weather_for_prediction(prediction_for_current_time):
             data_lighting_state[item] = 0
 
     data_weather = {
-        'is_daylight_hours': time_of_day['is_daylight_hours'],
         'is_dark_time': time_of_day['is_dark_time'],
+        'is_daylight_hours': time_of_day['is_daylight_hours'],
         'is_twilight': is_twilight,
         'is_light_on': data_lighting_state['is_light_on'],
         'is_light_off': data_lighting_state['is_light_off'],
-        'is_clear_sky': is_clear_sky,
-        'is_overcast': is_overcast,
-        'is_fog': is_fog,
-        'is_rain': is_rain,
         'is_snow': is_snow,
-        'is_snow_storm': is_snow_storm,
+        'is_fog': is_fog,
+        'is_overcast': is_overcast,
+        'is_clear_sky': is_clear_sky,
         'is_hurricane_wind': is_hurricane_wind,
+        'is_rain': is_rain,
+        'is_snow_storm': is_snow_storm,
         'temperature_is_above_30': temperature_is_above_30,
         'temperature_is_below_30': temperature_is_below_30,
     }
