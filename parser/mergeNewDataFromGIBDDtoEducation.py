@@ -111,10 +111,48 @@ def merge_new_data_from_GIBDD_to_Education():
     # Преобразуем данные в DataFrame
     coords_and_indications_df = pd.DataFrame(coords_and_indications_data, columns=coords_and_indications_columns)
 
+    # Функция для обновления или вставки новых координат в таблицу coords_and_nearby
+    def upsert_coords_and_nearby(new_row):
+        cur.execute("""
+            SELECT col_1 FROM accidentvisionai.coords_and_nearby
+            WHERE col_2 = %s AND col_3 = %s
+        """, (new_row['col_2'], new_row['col_3']))
+
+        existing_coords = cur.fetchone()
+
+        if existing_coords:
+            # Обновляем существующую запись
+            update_query = sql.SQL("""
+                UPDATE accidentvisionai.coords_and_nearby
+                SET {}
+                WHERE col_1 = %s
+            """).format(sql.SQL(', ').join(
+                sql.Composed([sql.Identifier(k), sql.SQL(" = "), sql.Placeholder()]) for k in
+                coords_and_nearby_new_columns
+                if k != 'col_1'
+            ))
+
+            cur.execute(update_query,
+                        [new_row[k] for k in coords_and_nearby_new_columns if k != 'col_1'] + [existing_coords[0]])
+        else:
+            # Вставляем новую запись
+            insert_query = sql.SQL("""
+                INSERT INTO accidentvisionai.coords_and_nearby ({})
+                VALUES ({})
+            """).format(
+                sql.SQL(', ').join(map(sql.Identifier, coords_and_nearby_new_columns)),
+                sql.SQL(', ').join(sql.Placeholder() * len(coords_and_nearby_new_columns))
+            )
+
+            cur.execute(insert_query, [new_row[k] for k in coords_and_nearby_new_columns])
+
     # Обрабатываем каждую новую координату
     for index, new_row in merged_df.iterrows():
         lat1, lon1 = new_row['col_2'], new_row['col_3']
         found_match = False
+
+        # Добавляем или обновляем координаты в таблице coords_and_nearby
+        upsert_coords_and_nearby(new_row)
 
         for index2, old_row in coords_and_indications_df.iterrows():
             lat2, lon2 = old_row['col_2'], old_row['col_3']
@@ -126,7 +164,7 @@ def merge_new_data_from_GIBDD_to_Education():
                         new_row_data = {**old_row.to_dict(), **new_row.to_dict()}
                         new_row_data['col_4'] = 0  # помечаем как безаварийный случай
 
-                        # Преобразуем значения в boolean и int, где это необходимо
+                        # Преобразуем значения в boolean и int где это необходимо
                         new_row_data = {
                             k: bool(v) if k == 'col_155' else int(v) if isinstance(v, np.integer) else float(
                                 v) if isinstance(v, np.float64) else v for k, v in new_row_data.items()}
@@ -138,16 +176,14 @@ def merge_new_data_from_GIBDD_to_Education():
                         found_match = True
                         break
                     except Exception as e:
-                        print(f"[PARSE] Ошибка при обработке координат {new_row['col_1']} и {old_row['col_1']}: {e}")
-                        return 1
+                        print(f"[PARSE] ОШИБКА: при обработке координат {new_row['col_1']} и {old_row['col_1']}: {e}")
+
         if not found_match:
-            print(f"[PARSE] Недостаточно данных для координаты {new_row['col_1']}")
-            return 1
+            print(f"[PARSE] ОШИБКА: Недостаточно данных для координаты {new_row['col_1']}")
 
     # Сохраняем изменения и закрываем соединение
     conn.commit()
     cur.close()
     conn.close()
 
-    print("[PARSE] Данные успешно добавлены в таблицу data_for_education_table_test.")
-    return 0
+    print("[PARSE] Данные успешно добавлены в таблицу data_for_education_table_test и coords_and_nearby.")

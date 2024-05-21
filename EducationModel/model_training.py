@@ -17,9 +17,10 @@ import io
 
 def create_new_classifier():
     current_dir = os.path.dirname(__file__)
-    kmeans_path = os.path.abspath(os.path.join(current_dir, '..', 'kmeans', 'kmeans_model.joblib'))
-    scaler_path = os.path.abspath(os.path.join(current_dir, '..', 'scaler', 'scaler.pkl'))
-    ohe_path = os.path.abspath(os.path.join(current_dir, '..', 'OneHotEncoder', 'onehotencoder.pkl'))
+    kmeans_dir = os.path.abspath(os.path.join(current_dir, '..', 'kmeans'))
+    scaler_dir = os.path.abspath(os.path.join(current_dir, '..', 'scaler'))
+    ohe_dir = os.path.abspath(os.path.join(current_dir, '..', 'OneHotEncoder'))
+    classifier_dir = os.path.abspath(os.path.join(current_dir, '..', 'classifiers'))
 
     dbname = 'accidentsvisionai'
     user = 'postgres'
@@ -50,14 +51,12 @@ def create_new_classifier():
 
     columns_dict = {col_num: col_name for col_num, col_name in columns_data}
 
-    # Преобразование данных в DataFrame
     merged_df = pd.DataFrame(merged_data, columns=columns)
     merged_df.rename(columns=columns_dict, inplace=True)
 
     merged_df.drop(columns=['id'], inplace=True)
     merged_df.dropna(inplace=True)
 
-    # Clustering geographic data
     num_clusters = 25
     kmeans = KMeans(n_clusters=num_clusters, random_state=42)
     clusters = kmeans.fit_predict(merged_df[['latitude', 'longitude']])
@@ -77,7 +76,6 @@ def create_new_classifier():
 
     X_train, X_test, y_train, y_test = train_test_split(features_final, labels, test_size=0.33, random_state=42)
 
-    # Define and train stacking classifier
     estimators = [
         ('rf', RandomForestClassifier(n_estimators=100, random_state=42)),
         ('xgb', XGBClassifier(use_label_encoder=False, eval_metric='logloss'))
@@ -90,19 +88,11 @@ def create_new_classifier():
 
     stacking_classifier.fit(X_train, y_train)
 
-    # Save models and objects
-    joblib.dump(stacking_classifier, 'stacking_classifier_model_v1.pkl')
-    joblib.dump(kmeans, 'kmeans_model.pkl')
-    joblib.dump(scaler, 'scaler.pkl')
-    joblib.dump(ohe, 'onehotencoder.pkl')
-
-    # Predict probabilities
     probabilities = stacking_classifier.predict_proba(X_test)[:, 1]
     print("Probabilities of accidents:", probabilities)
 
     true_probs, predicted_probs = calibration_curve(y_test, probabilities, n_bins=10)
 
-    # Create calibration curve plot
     plt.figure(figsize=(10, 6))
     plt.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
     plt.plot(predicted_probs, true_probs, "s-")
@@ -125,7 +115,6 @@ def create_new_classifier():
     brier_score = brier_score_loss(y_test, probabilities)
     print(f"Brier Score: {brier_score}")
 
-    # Insert metrics and calibration curve image into PostgreSQL
     insert_query = """
     INSERT INTO accidentvisionai.model_metrics_table (classifier_name, auc_roc_score, log_loss, brier_score, calibration_curve)
     VALUES (%s, %s, %s, %s, %s)
@@ -136,15 +125,19 @@ def create_new_classifier():
     conn.commit()
     model_id = cur.fetchone()[0]
 
-    # Formulate the classifier version
     classifier_version = f"v{model_id}"
     classifier_name = f'stacking_classifier_model_{classifier_version}.pkl'
 
+    classifier_path = os.path.join(classifier_dir, classifier_name)
+    kmeans_path = os.path.join(kmeans_dir, 'kmeans_model.pkl')
+    scaler_path = os.path.join(scaler_dir, 'scaler.pkl')
+    ohe_path = os.path.join(ohe_dir, 'onehotencoder.pkl')
+
     # Save the model with the versioned name
-    joblib.dump(stacking_classifier, classifier_name)
-    joblib.dump(kmeans, f'kmeans_model.pkl')
-    joblib.dump(scaler, f'scaler.pkl')
-    joblib.dump(ohe, f'onehotencoder.pkl')
+    joblib.dump(stacking_classifier, classifier_path)
+    joblib.dump(kmeans, kmeans_path)
+    joblib.dump(scaler, scaler_path)
+    joblib.dump(ohe, ohe_path)
 
     # Update the database with the versioned classifier name
     update_query = """
@@ -155,7 +148,6 @@ def create_new_classifier():
     cur.execute(update_query, (classifier_name, model_id))
     conn.commit()
 
-    # Close the database connection
     cur.close()
     conn.close()
 

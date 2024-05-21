@@ -29,9 +29,10 @@ def calculate_civil_twilight(city_name, country_name, latitude, longitude, date)
     }
 
 
-def is_current_time_in_twilight(city_name, country_name, latitude, longitude):
+def is_current_time_in_twilight(city_name, country_name, latitude, longitude, hour=0):
     # Получаем текущее время и дату
     current_time = datetime.now(utc)
+    current_time = current_time + timedelta(hours=hour)
     current_date = current_time.date()
 
     # Вычисляем времена сумерек на текущую дату

@@ -17,7 +17,8 @@ cur = conn.cursor()
 
 # Создаем таблицу predictions
 create_predictions_table_query = """
-CREATE TABLE IF NOT EXISTS accidentvisionai.data_for_prediction_table (
+DROP TABLE IF EXISTS accidentvisionai.data_for_prediction_table;
+CREATE TABLE accidentvisionai.data_for_prediction_table (
     id SERIAL PRIMARY KEY,
     col_5 INT,
     col_6 INT,
@@ -116,7 +117,7 @@ CREATE TABLE IF NOT EXISTS accidentvisionai.data_for_prediction_table (
     col_154 INT,
     col_155 BOOLEAN,
     coords_and_nearby INT,
-    FOREIGN KEY (coords_and_nearby) REFERENCES accidentvisionai.coords_and_nearby(col_1)
+    FOREIGN KEY (coords_and_nearby) REFERENCES accidentvisionai.coords_and_nearby(col_1) ON DELETE CASCADE
 );
 """
 

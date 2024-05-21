@@ -1,7 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 import asyncio
@@ -15,7 +15,6 @@ from get_current_predictions_from_db import get_current_predictions_from_db
 from check_records_for_current_date_and_hour import check_records_for_current_date_and_hour
 from PrepareDataForClient import PrepareDataForClient
 
-
 app = FastAPI()
 
 origins = [
@@ -23,6 +22,13 @@ origins = [
     "http://127.0.0.1:8000",
 
 ]
+
+hours_table_for_future_predictions = {
+    1: 5,
+    2: 9,
+    3: 13,
+    4: 17,
+}
 
 app.add_middleware(
     CORSMiddleware,
@@ -39,16 +45,24 @@ class WeatherData(BaseModel):
     longitude: float
 
 
-def get_current_weather_from_api():
-    url = "https://api.open-meteo.com/v1/forecast?latitude=55.0415&longitude=82.9346&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m"
-    response = requests.get(url)
-    weather_data = response.json()
-    current_weather = weather_data["current"]
-    return current_weather
+def get_current_weather_from_api(for_current_state=True):
+    if for_current_state:
+        url = "https://api.open-meteo.com/v1/forecast?latitude=55.0415&longitude=82.9346&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,surface_pressure,wind_speed_10m,wind_direction_10m,wind_gusts_10m"
+        response = requests.get(url)
+        weather_data = response.json()
+        current_weather = weather_data["current"]
+        return current_weather
+    else:
+        url = "https://api.open-meteo.com/v1/forecast?latitude=55.0415&longitude=82.9346&minutely_15=temperature_2m,relative_humidity_2m,precipitation,rain,snowfall,weather_code,wind_speed_10m,is_day&timezone=auto&forecast_days=1&forecast_minutely_15=24"
+        response = requests.get(url)
+        weather_data = response.json()
+        current_weather = weather_data["minutely_15"]
+        print(1)
+        return current_weather
 
 
 async def make_prediction(data_of_current_state):
-    merge_to_predictions(data_of_current_state)
+    merge_to_predictions(data_of_current_state, for_current_state=True)
     make_prediction_from_latest_model()
 
 
@@ -79,22 +93,34 @@ def determine_lighting_state(current_time):
     return lighting_state
 
 
-def determine_road_condition(data_weather: dict):
-    current_date = datetime.now()
+def determine_road_condition(data_weather: dict, for_current_state=True, hour=0):
+    if for_current_state:
+        current_date = datetime.now()
+        anti_ice_period = (current_date.month == 11 and current_date.day >= 15) or (1 <= current_date.month <= 3) or (
+                current_date.month == 4 and current_date.day <= 15)
+        temperature = data_weather["temperature_2m"]
+        precipitation = data_weather["precipitation"]
+        snow = data_weather["snowfall"]
+        humidity = data_weather["relative_humidity_2m"]
+        weather_code = data_weather["weather_code"]
 
-    anti_ice_period = (current_date.month == 11 and current_date.day >= 15) or (1 <= current_date.month <= 3) or (
-            current_date.month == 4 and current_date.day <= 15)
+    else:
+        current_date = datetime.now()
+        current_date = current_date + timedelta(hours=hour)
+        needed_hour = hours_table_for_future_predictions[hour]
+        anti_ice_period = (current_date.month == 11 and current_date.day >= 15) or (1 <= current_date.month <= 3) or (
+                current_date.month == 4 and current_date.day <= 15)
+        temperature = data_weather["temperature_2m"][needed_hour]
+        precipitation = data_weather["precipitation"][needed_hour]
+        snow = data_weather["snowfall"][needed_hour]
+        humidity = data_weather["relative_humidity_2m"][needed_hour]
+        weather_code = data_weather["weather_code"][needed_hour]
 
-    temperature = data_weather["temperature_2m"]
-    precipitation = data_weather["precipitation"]
-    snow = data_weather["snowfall"]
-    humidity = data_weather["relative_humidity_2m"]
-    weather_code = data_weather["weather_code"]
     road_surface_conditions = {'is_dusty': 0, 'is_chemical': 0, 'is_snowy': 0, 'is_icy_conditions': 0, 'is_wet': 0,
                                'is_dry': 0}
     if anti_ice_period:
-        return "Обработанное противогололедными материалами"
-
+        road_surface_conditions['is_chemical'] = 1
+        return road_surface_conditions
     if weather_code in [71, 73, 75, 77, 85, 86]:  # Коды для снега и снежных ливней
         if snow > 1:  # Если снегопад более 1 см
             road_surface_conditions['is_snowy'] = 1
@@ -113,11 +139,11 @@ def determine_road_condition(data_weather: dict):
             road_surface_conditions['is_dry'] = 1
             return road_surface_conditions
     elif weather_code in [45, 48]:  # Коды для тумана
-        road_surface_conditions['is_chemical'] = 1
+        road_surface_conditions['is_wet'] = 1
         return road_surface_conditions
     elif weather_code in [0, 1, 2, 3]:  # Коды для ясного неба и облачности
         if humidity > 80:
-            road_surface_conditions['is_chemical'] = 1
+            road_surface_conditions['is_wet'] = 1
             return road_surface_conditions
         elif humidity < 50:
             road_surface_conditions['is_dry'] = 1
@@ -130,16 +156,26 @@ def determine_road_condition(data_weather: dict):
             return road_surface_conditions
 
 
-def prepare_time_of_day_from_api():
-    current_time = get_current_weather_from_api()
+def prepare_time_of_day_from_api(is_for_current_state=True, hour=0):
     time_of_day = {'is_daylight_hours': 0, 'is_dark_time': 0}
 
-    if current_time['is_day']:
-        time_of_day['is_daylight_hours'] = 1
-    else:
-        time_of_day['is_dark_time'] = 1
+    if is_for_current_state:
+        current_time = get_current_weather_from_api(for_current_state=True)
+        if current_time['is_day']:
+            time_of_day['is_daylight_hours'] = 1
+        else:
+            time_of_day['is_dark_time'] = 1
 
-    return time_of_day
+        return time_of_day
+    else:
+        current_time = get_current_weather_from_api(for_current_state=False)
+        needed_hour = hours_table_for_future_predictions[hour]
+        if current_time['is_day'][needed_hour]:
+            time_of_day['is_daylight_hours'] = 1
+        else:
+            time_of_day['is_dark_time'] = 1
+
+        return time_of_day
 
 
 def get_day_off(date):
@@ -147,18 +183,25 @@ def get_day_off(date):
     return response.text == '1'
 
 
-def prepare_weather_for_prediction(prediction_for_current_time):
-    formatted_date = datetime.now().strftime('%Y-%m-%d')
-    is_day_off = get_day_off(formatted_date)
-    data_time = get_time_binary()
-    time_of_day = prepare_time_of_day_from_api()
+def prepare_weather_for_prediction(prediction_for_current_time, hours=0):
+
+    if prediction_for_current_time:
+        formatted_date = datetime.now().strftime('%Y-%m-%d')
+        is_day_off = get_day_off(formatted_date)
+        data_time = get_time_binary(is_for_current_state=True)
+        time_of_day = prepare_time_of_day_from_api(is_for_current_state=True)
+    else:
+        now_time = datetime.now() + timedelta(hours=hours)
+        is_day_off = get_day_off(now_time.strftime('%Y-%m-%d'))
+        data_time = get_time_binary(is_for_current_state=False, hour=hours)
+        time_of_day = prepare_time_of_day_from_api(is_for_current_state=False, hour=hours)
 
     city_name = "Novosibirsk"
     country_name = "Russia"
     latitude = 55.0415
     longitude = 82.9346
 
-    if is_current_time_in_twilight(city_name, country_name, latitude, longitude):
+    if is_current_time_in_twilight(city_name, country_name, latitude, longitude, hours):
         is_twilight = 1
         for key in time_of_day:
             time_of_day[key] = 0
@@ -174,14 +217,24 @@ def prepare_weather_for_prediction(prediction_for_current_time):
     is_hurricane_wind = 0
     temperature_is_above_30 = 0
     temperature_is_below_30 = 0
-    current_weather = {}
+
 
     if prediction_for_current_time:
-        current_weather = get_current_weather_from_api()
+        current_weather = get_current_weather_from_api(for_current_state=True)
+        road_surface_conditions = determine_road_condition(current_weather, for_current_state=True)
+        weather_code = current_weather["weather_code"]
+        wind_speed = current_weather["wind_speed_10m"]
+        temperature = current_weather["temperature_2m"]
 
-    road_surface_conditions = determine_road_condition(current_weather)
+    else:
+        needed_hour = hours_table_for_future_predictions[hours]
+        current_weather = get_current_weather_from_api(for_current_state=False)
+        road_surface_conditions = determine_road_condition(current_weather, for_current_state=False, hour=hours)
+        weather_code = current_weather["weather_code"][needed_hour]
+        wind_speed = current_weather["wind_speed_10m"][needed_hour]
+        temperature = current_weather["temperature_2m"][needed_hour]
 
-    match current_weather['weather_code']:
+    match weather_code:
         case 0 | 1:
             is_clear_sky = 1
         case 2 | 3:
@@ -195,19 +248,19 @@ def prepare_weather_for_prediction(prediction_for_current_time):
         case _:
             pass
 
-    if is_snow and current_weather['wind_speed_10m'] > 10:
+    if is_snow and wind_speed > 10:
         is_snow_storm = 1
-    if current_weather['wind_speed_10m'] >= 15:
+    if wind_speed >= 15:
         is_hurricane_wind = 1
-    if current_weather['wind_speed_10m'] >= 30:
+    if wind_speed >= 30:
         is_hurricane_wind = 1
-    if current_weather['temperature_2m'] >= 30:
+    if wind_speed >= 30:
         temperature_is_above_30 = 1
-    elif current_weather['temperature_2m'] <= -30:
+    elif temperature <= -30:
         temperature_is_below_30 = 1
 
     data_time['isDayOff'] = is_day_off
-    data_lighting_state = determine_lighting_state(datetime.now())
+    data_lighting_state = determine_lighting_state(datetime.now() + timedelta(hours=hours))
 
     if time_of_day['is_daylight_hours'] == 1:
         for item in data_lighting_state:
@@ -239,6 +292,7 @@ def prepare_weather_for_prediction(prediction_for_current_time):
 async def scheduled_task():
     data_of_current_state = prepare_weather_for_prediction(prediction_for_current_time=True)
     await make_prediction(data_of_current_state)
+    # print(f"[PREDICTION] Отключено")
 
 
 async def daily_scheduled_task():
@@ -290,6 +344,18 @@ async def predict():
     dict_of_current_state = PrepareDataForClient(dict_of_current_state)
     return dict_of_current_state
 
+
+
+@app.get('/next-hour-situation-{hours}', response_model=dict)
+async def predict(hours: int):
+    if hours < 1:
+        raise HTTPException(status_code=400, detail="Number of hours must be at least 1")
+
+    data_of_future_state = prepare_weather_for_prediction(prediction_for_current_time=False, hours=hours)
+    dataFrame_for_predicion = merge_to_predictions(data_of_future_state, for_current_state=False)
+    predictions = make_prediction_from_latest_model(for_current_state=False, dataFrame_for_prediction=dataFrame_for_predicion)
+    data_for_return = PrepareDataForClient(predictions)
+    return data_for_return
 
 @app.get("/check_predictions/")
 async def check_predictions():

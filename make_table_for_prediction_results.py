@@ -20,7 +20,7 @@ DROP TABLE IF EXISTS accidentvisionai.predictions_results;
 
 CREATE TABLE accidentvisionai.predictions_results (
     prediction_id SERIAL PRIMARY KEY,
-    coords_id INTEGER REFERENCES accidentvisionai.coords_and_nearby(col_1),
+    coords_id INTEGER REFERENCES accidentvisionai.coords_and_nearby(col_1) ON DELETE CASCADE, 
     indications_id INTEGER REFERENCES accidentvisionai.indications_table(id),
     prediction_date DATE,
     prediction_time TIME,
