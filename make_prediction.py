@@ -113,8 +113,6 @@ def make_prediction_from_latest_model(for_current_state=True, dataFrame_for_pred
 
     columns_dict = {col_num: col_name for col_num, col_name in columns_data}
 
-    # Преобразование данных в DataFrame
-
     merged_df.rename(columns=columns_dict, inplace=True)
     # Извлечение признаков для предсказания
     X = merged_df
