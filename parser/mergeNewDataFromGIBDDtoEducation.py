@@ -1,43 +1,16 @@
 import pandas as pd
 import psycopg2
 from psycopg2 import sql
+from geopy.distance import geodesic
+import random
 import numpy as np
-from math import radians, cos, sin, sqrt, atan2
-
+from collections import namedtuple
 
 def merge_new_data_from_GIBDD_to_Education():
     # Параметры подключения
     dbname = 'accidentsvisionai'
     user = 'postgres'
     password = 'Nikita232398'
-
-    # Функция для вычисления расстояния между двумя координатами по формуле Хаверсина
-    def haversine(lat1, lon1, lat2, lon2):
-        R = 6371000  # Радиус Земли в метрах
-        phi1, phi2 = radians(lat1), radians(lat2)
-        delta_phi = radians(lat2 - lat1)
-        delta_lambda = radians(lon2 - lon1)
-        a = sin(delta_phi / 2) ** 2 + cos(phi1) * cos(phi2) * sin(delta_lambda / 2) ** 2
-        c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        return R * c
-
-    # Функция для извлечения даты и времени из строки данных
-    def extract_datetime(row):
-        try:
-            year = row['col_80']
-            month = next((month for month in range(1, 13) if row.get(f'col_{81 + month - 1}', 0) == 1), None)
-            day = next((day for day in range(1, 32) if row.get(f'col_{93 + day - 1}', 0) == 1), None)
-            hour = next((hour for hour in range(24) if row.get(f'col_{131 + hour}', 0) == 1), None)
-            return (year, month, day, hour)
-        except KeyError as e:
-            print(f"KeyError: {e} in row {row.name}")
-            return None
-
-    # Функция для проверки совпадения даты и времени
-    def is_same_datetime(row1, row2):
-        dt1 = extract_datetime(row1)
-        dt2 = extract_datetime(row2)
-        return dt1 is not None and dt2 is not None and dt1 == dt2
 
     # Подключаемся к базе данных PostgreSQL
     conn = psycopg2.connect(
@@ -83,6 +56,15 @@ def merge_new_data_from_GIBDD_to_Education():
         elif col in ['col_2', 'col_3']:
             merged_df[col] = merged_df[col].astype(float)
 
+    # Получаем последний существующий ID
+    cur.execute("SELECT MAX(col_1) FROM accidentvisionai.data_for_education_table_test")
+    last_id = cur.fetchone()[0]
+    if last_id is None:
+        last_id = 0
+
+    # Создаем новые уникальные идентификаторы
+    merged_df['col_1'] = range(last_id + 1, last_id + 1 + len(merged_df))
+
     # Создаем список столбцов для вставки в таблицу data_for_education_table_test
     data_for_education_columns = merged_df.columns.tolist()
 
@@ -96,27 +78,12 @@ def merge_new_data_from_GIBDD_to_Education():
     for row in merged_df.itertuples(index=False, name=None):
         cur.execute(insert_query, row)
 
-    # Извлекаем данные из таблицы coords_and_nearby и indications_table и объединяем их
-    cur.execute("""
-        SELECT cn.*, it.*
-        FROM accidentvisionai.coords_and_nearby cn
-        JOIN accidentvisionai.indications_table it
-        ON cn.col_1 = it.id
-    """)
-    coords_and_indications_data = cur.fetchall()
-
-    # Получаем имена столбцов для объединенных данных
-    coords_and_indications_columns = [desc[0] for desc in cur.description]
-
-    # Преобразуем данные в DataFrame
-    coords_and_indications_df = pd.DataFrame(coords_and_indications_data, columns=coords_and_indications_columns)
-
     # Функция для обновления или вставки новых координат в таблицу coords_and_nearby
     def upsert_coords_and_nearby(new_row):
         cur.execute("""
             SELECT col_1 FROM accidentvisionai.coords_and_nearby
             WHERE col_2 = %s AND col_3 = %s
-        """, (new_row['col_2'], new_row['col_3']))
+        """, (new_row.col_2, new_row.col_3))
 
         existing_coords = cur.fetchone()
 
@@ -133,57 +100,161 @@ def merge_new_data_from_GIBDD_to_Education():
             ))
 
             cur.execute(update_query,
-                        [new_row[k] for k in coords_and_nearby_new_columns if k != 'col_1'] + [existing_coords[0]])
+                        [getattr(new_row, k) for k in coords_and_nearby_new_columns if k != 'col_1'] + [existing_coords[0]])
         else:
             # Вставляем новую запись
             insert_query = sql.SQL("""
-                INSERT INTO accidentvisionai.coords_and_nearby ({})
+                INSERT INTO accidentvisionai.coords_and_nearby_test ({})
                 VALUES ({})
             """).format(
                 sql.SQL(', ').join(map(sql.Identifier, coords_and_nearby_new_columns)),
                 sql.SQL(', ').join(sql.Placeholder() * len(coords_and_nearby_new_columns))
             )
 
-            cur.execute(insert_query, [new_row[k] for k in coords_and_nearby_new_columns])
+            cur.execute(insert_query, [getattr(new_row, k) for k in coords_and_nearby_new_columns])
 
     # Обрабатываем каждую новую координату
-    for index, new_row in merged_df.iterrows():
-        lat1, lon1 = new_row['col_2'], new_row['col_3']
-        found_match = False
-
+    for new_row in merged_df.itertuples(index=False, name='Row'):
         # Добавляем или обновляем координаты в таблице coords_and_nearby
         upsert_coords_and_nearby(new_row)
 
-        for index2, old_row in coords_and_indications_df.iterrows():
-            lat2, lon2 = old_row['col_2'], old_row['col_3']
+    select_columns_query = "SELECT column_number, column_name FROM accidentvisionai.columns_name_table;"
+    cur.execute(select_columns_query)
+    columns_data = cur.fetchall()
 
-            if haversine(lat1, lon1, lat2, lon2) > 200:
-                if is_same_datetime(new_row, old_row):
-                    try:
-                        # Добавляем новую запись в таблицу data_for_education_table_test как безаварийный случай
-                        new_row_data = {**old_row.to_dict(), **new_row.to_dict()}
-                        new_row_data['col_4'] = 0  # помечаем как безаварийный случай
+    columns_dict = {col_num: col_name for col_num, col_name in columns_data}
 
-                        # Преобразуем значения в boolean и int где это необходимо
-                        new_row_data = {
-                            k: bool(v) if k == 'col_155' else int(v) if isinstance(v, np.integer) else float(
-                                v) if isinstance(v, np.float64) else v for k, v in new_row_data.items()}
+    merged_df.rename(columns=columns_dict, inplace=True)
 
-                        # Удаляем col_1, чтобы позволить автоинкремент
-                        new_row_data.pop('col_1')
+    print("1")
 
-                        cur.execute(insert_query, list(new_row_data.values()))
-                        found_match = True
-                        break
-                    except Exception as e:
-                        print(f"[PARSE] ОШИБКА: при обработке координат {new_row['col_1']} и {old_row['col_1']}: {e}")
+    print("[PARSE] Данные успешно добавлены в таблицу data_for_education_table_test и coords_and_nearby.")
 
-        if not found_match:
-            print(f"[PARSE] ОШИБКА: Недостаточно данных для координаты {new_row['col_1']}")
+    # Генерация "безаварийных случаев" и вставка их в таблицу data_for_education_table_test
+    synthetic_non_accidents = generate_synthetic_non_accidents(merged_df)
+    last_id = merged_df.tail(1)['id'].values[0] + 1
+    new_id_for_synthetic_non_accidents = list(range(last_id, last_id + len(synthetic_non_accidents)))
+    synthetic_non_accidents['id'] = new_id_for_synthetic_non_accidents
+    for row in synthetic_non_accidents.itertuples(index=False, name=None):
+        cur.execute(insert_query, row)
 
     # Сохраняем изменения и закрываем соединение
     conn.commit()
     cur.close()
     conn.close()
 
-    print("[PARSE] Данные успешно добавлены в таблицу data_for_education_table_test и coords_and_nearby.")
+    print("[PARSE] Синтетические данные о безаварийных сценариях добавлены в таблицу data_for_education_table_test.")
+
+def load_data(file_path):
+    return pd.read_csv(file_path)
+
+def calculate_distance(lat1, lon1, lat2, lon2):
+    return geodesic((lat1, lon1), (lat2, lon2)).meters
+
+def generate_synthetic_non_accidents(df, num_samples=10000):
+    excluded_columns = [
+        'Регулируемый пешеходный переход, расположенный на участке улицы или дороги, проходящей вдоль территории школы или иного детского учреждения',
+        'Нерегулируемое пересечение с круговым движением',
+        'Многоквартирные жилые дома',
+        'Зоны отдыха',
+        'Тоннель',
+        'Регулируемый перекрёсток',
+        'АЗС',
+        'Производственное предприятие',
+        'Регулируемый ж/д переезд без дежурного',
+        'Выезд с прилегающей территории',
+        'Одиночный торговый объект, являющийся местом притяжения транспорта и (или) пешеходов',
+        'Нерегулируемый пешеходный переход',
+        'Административные здания',
+        'Спортивные и развлекательные объекты',
+        'Регулируемый ж/д переезд с дежурным',
+        'Надземный пешеходный переход',
+        'Подземный пешеходный переход',
+        'Школа либо иная детская (в т.ч. дошкольная) организация',
+        'Иной объект',
+        'Эстакада, путепровод',
+        'Кладбище',
+        'Объект строительства',
+        'Территориальное подразделение МВД России (либо его структурное подразделение)',
+        'Пешеходная зона',
+        'Автостоянка (отделенная от проезжей части)',
+        'Мост, эстакада, путепровод',
+        'Медицинские (лечебные) организации',
+        'Автостоянка (не отделённая от проезжей части)',
+        'Объект торговли, общественного питания на автодороге вне НП',
+        'Подход к мосту, эстакаде, путепроводу',
+        'Нерегулируемый пешеходный переход, расположенный на участке улицы или дороги, проходящей вдоль территории школы или иной детской организации',
+        'Автовокзал (автостанция)',
+        'Остановка общественного транспорта',
+        'Иное образовательное учреждение',
+        'Регулируемый пешеходный переход, расположенный на участке улицы или дороги, проходящей вдоль территории школы или иной детской организации',
+        'Регулируемый перекресток',
+        'Иная образовательная организация',
+        'Тротуар, пешеходная дорожка',
+        'Нерегулируемый ж/д переезд',
+        'Крупный торговый объект (являющийся объектом массового тяготения пешеходов и (или) транспорта)',
+        'Остановка трамвая',
+        'Школа либо иное детское (в т.ч. дошкольное) учреждение',
+        'Лечебные учреждения',
+        'Нерегулируемый перекрёсток неравнозначных улиц (дорог)',
+        'Жилые дома индивидуальной застройки',
+        'Остановка маршрутного такси',
+        'Мост',
+        'Внутридворовая территория',
+        'Аэропорт, ж/д вокзал (ж/д станция), речной или морской порт (пристань)',
+        'Нерегулируемый перекрёсток равнозначных улиц (дорог)',
+        'Нерегулируемый пешеходный переход, расположенный на участке улицы или дороги, проходящей вдоль территории школы или иного детского учреждения',
+        'Регулируемый пешеходный переход',
+        'Нерегулируемый перекрёсток',
+        'Объект (здание, сооружение) религиозного культа'
+    ]
+    # Список для хранения новых синтетических строк данных
+    new_data_rows = []
+    # Множество для отслеживания уже использованных аварий
+    used_accidents = set()
+    # Удаляем строки с пустыми координатами
+    df = df.dropna(subset=['latitude', 'longitude'])
+    # Получаем индексы строк с авариями
+    accident_indices = df[df['accident_occurred'] == 1].index.tolist()
+    # Перемешиваем индексы аварий
+    random.shuffle(accident_indices)
+
+    for idx in accident_indices:
+        if len(used_accidents) >= num_samples:
+            break
+        if idx not in used_accidents:
+            accident_row = df.loc[idx]
+            # Находим потенциальные неаварийные строки, которые не совпадают по году, месяцу, дню и часу
+            potential_matches = df[(df['year'] != accident_row['year']) |
+                                   (df[['month_' + str(i) for i in range(1, 13)]] != accident_row[
+                                       ['month_' + str(i) for i in range(1, 13)]]).any(axis=1) |
+                                   (df[['day_' + str(i) for i in range(1, 32)]] != accident_row[
+                                       ['day_' + str(i) for i in range(1, 32)]]).any(axis=1) |
+                                   (df[['hour_' + str(i) for i in range(24)]] != accident_row[
+                                       ['hour_' + str(i) for i in range(24)]]).any(axis=1)]
+
+            # Перемешиваем потенциальные строки
+            potential_matches = potential_matches.sample(frac=1)
+
+            for _, non_accident_row in potential_matches.iterrows():
+                distance = calculate_distance(accident_row['latitude'], accident_row['longitude'],
+                                              non_accident_row['latitude'], non_accident_row['longitude'])
+                # Проверяем, что расстояние между точками больше 100 метров
+                if distance >= 100:
+                    # Создаем новую строку, где координаты берутся из неаварийной строки, а некоторые поля из аварийной
+                    new_row = {col: non_accident_row[col] if col not in excluded_columns else accident_row[col] for col in df.columns}
+                    new_row['latitude'] = non_accident_row['latitude']
+                    new_row['longitude'] = non_accident_row['longitude']
+                    # Указываем, что это не авария
+                    new_row['accident_occurred'] = 0
+                    # Добавляем новую строку в список
+                    new_data_rows.append(new_row)
+                    # Отмечаем аварийную строку как использованную
+                    used_accidents.add(idx)
+                    break
+    # Сохраняем порядок столбцов
+    final_columns = df.columns.tolist()
+    # Возвращаем DataFrame с новыми данными
+    return pd.DataFrame(new_data_rows, columns=final_columns)
+
+

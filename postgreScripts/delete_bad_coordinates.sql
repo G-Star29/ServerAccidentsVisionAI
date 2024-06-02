@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS cities (
     boundary GEOMETRY
 );
 
--- Добавление записи для Новосибирска (если еще не добавлено)
+-- Добавление записи для Новосибирска
 INSERT INTO cities (name, boundary)
 VALUES ('Новосибирск', ST_GeomFromText('POLYGON((82.7157 55.0050, 83.046774 54.795568, 83.173072 54.940872, 83.0020 55.13, 82.7157 54.9924, 82.7157 55.0050))', 4326))
 ON CONFLICT (name) DO NOTHING;

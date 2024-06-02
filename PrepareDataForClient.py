@@ -1,18 +1,6 @@
 import numpy as np
-import math
+from geopy.distance import great_circle
 from sklearn.cluster import DBSCAN
-
-
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371000  # Радиус Земли в метрах
-    phi1 = np.radians(lat1)
-    phi2 = np.radians(lat2)
-    delta_phi = np.radians(lat2 - lat1)
-    delta_lambda = np.radians(lon2 - lon1)
-    a = np.sin(delta_phi / 2.0) ** 2 + np.cos(phi1) * np.cos(phi2) * np.sin(delta_lambda / 2.0) ** 2
-    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
-    return R * c
-
 
 def PrepareDataForClient(data):
     coords = []
@@ -25,7 +13,7 @@ def PrepareDataForClient(data):
                 lat, lon = float(lat), float(lon)
             else:
                 lat, lon = map(float, key.split(","))
-            if math.isnan(lat) or math.isnan(lon):
+            if np.isnan(lat) or np.isnan(lon):
                 raise ValueError("NaN value found")
             coords.append([lat, lon])
             probs.append(value)
@@ -53,10 +41,14 @@ def PrepareDataForClient(data):
         cluster_coords = coords[labels == label]
         cluster_probs = probs[labels == label]
 
-        mean_lat = np.mean(cluster_coords[:, 0])
-        mean_lon = np.mean(cluster_coords[:, 1])
+        # Найти точку, ближайшую ко всем остальным точкам в кластере
+        distances_sum = np.sum([[great_circle(tuple(cluster_coords[j]), tuple(cluster_coords[i])).meters
+                                 for j in range(len(cluster_coords))]
+                                for i in range(len(cluster_coords))], axis=1)
+        center_idx = np.argmin(distances_sum)
+        center_coord = cluster_coords[center_idx]
         mean_prob = np.mean(cluster_probs)
 
-        clusters[(mean_lat, mean_lon)] = mean_prob
+        clusters[tuple(center_coord)] = mean_prob
 
     return clusters

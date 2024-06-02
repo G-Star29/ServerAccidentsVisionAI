@@ -1,7 +1,7 @@
 import psycopg2
 import pandas as pd
 
-def merge_to_predictions(data_of_current_state, for_current_state=True):
+def merge_to_predictions_table(data_of_current_state, for_current_state=True):
     dbname = 'accidentsvisionai'
     user = 'postgres'
     password = 'Nikita232398'

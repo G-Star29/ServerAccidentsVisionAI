@@ -16,6 +16,10 @@ class YearlyData(BaseModel):
     rain_percentage: float
     blizzard_percentage: float
     isDayOff_percentage: float
+    morning_percentage: float
+    afternoon_percentage: float
+    evening_percentage: float
+    night_percentage: float
 
 def get_statistics_from_db():
     dbname = 'accidentsvisionai'
@@ -66,10 +70,23 @@ def get_statistics_from_db():
         'В выходные дни': 'isDayOff'
     }
 
-    # Расчет процентов
+    # Расчет процентов для стандартных условий
     for condition, column in conditions.items():
         condition_data = merged_df.groupby('year')[column].mean().reset_index(name=f'{column}_percentage')
         yearly_data = yearly_data.merge(condition_data, on='year')
+
+    # Расчет процентов для времени суток
+    time_conditions = {
+        'morning': list(range(6, 12)),  # Утро с 6 до 11
+        'afternoon': list(range(12, 18)),  # День с 12 до 17
+        'evening': list(range(18, 24)),  # Вечер с 18 до 23
+        'night': list(range(0, 6))  # Ночь с 0 до 5
+    }
+
+    for time_of_day, hours in time_conditions.items():
+        merged_df[f'{time_of_day}_accidents'] = merged_df[[f'hour_{hour}' for hour in hours]].sum(axis=1)
+        time_data = merged_df.groupby('year')[f'{time_of_day}_accidents'].mean().reset_index(name=f'{time_of_day}_percentage')
+        yearly_data = yearly_data.merge(time_data, on='year')
 
     # Преобразование имен столбцов для соответствия модели
     column_mapping = {
@@ -83,7 +100,11 @@ def get_statistics_from_db():
         'Ураганный ветер_percentage': 'hurricane_wind_percentage',
         'Дождь_percentage': 'rain_percentage',
         'Метель_percentage': 'blizzard_percentage',
-        'isDayOff_percentage': 'isDayOff_percentage'
+        'isDayOff_percentage': 'isDayOff_percentage',
+        'morning_percentage': 'morning_percentage',
+        'afternoon_percentage': 'afternoon_percentage',
+        'evening_percentage': 'evening_percentage',
+        'night_percentage': 'night_percentage'
     }
     yearly_data.rename(columns=column_mapping, inplace=True)
 
