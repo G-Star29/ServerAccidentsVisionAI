@@ -227,13 +227,11 @@ def prepare_weather_for_prediction(prediction_for_current_time, hours=0):
     if rain > 5:
         is_rain = 1
 
-    if is_snow and wind_speed > 10:
+    if is_snow and wind_speed > 2.5:
         is_snow_storm = 1
-    if wind_speed >= 15:
+    if wind_speed >= 8.3:
         is_hurricane_wind = 1
-    if wind_speed >= 30:
-        is_hurricane_wind = 1
-    if wind_speed >= 30:
+    if temperature >= 30:
         temperature_is_above_30 = 1
     elif temperature <= -30:
         temperature_is_below_30 = 1

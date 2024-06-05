@@ -113,8 +113,6 @@ def make_prediction_from_latest_model(for_current_state=True, dataFrame_for_pred
             prediction_date = datetime.now().date()
             prediction_time = datetime.now().time()
             prediction_value = float(prediction[1])  # Преобразование в стандартный тип float
-            # print( f"Inserting: coords_id={coords_id}, indications_id={indications_id}, prediction_date={
-            # prediction_date}, prediction_time={prediction_time}, prediction_value={prediction_value}")
             cur.execute(insert_query, (coords_id, prediction_date, prediction_time, prediction_value))
 
         print(f"[PREDICTION] Прогноз загружен в БД {prediction_date} {prediction_time}")

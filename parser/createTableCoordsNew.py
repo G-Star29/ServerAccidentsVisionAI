@@ -39,8 +39,7 @@ def create_table_coords_new():
 
     # Создаем таблицу coords_and_nearby_new
     create_coords_and_nearby_query = """
-    DROP TABLE IF EXISTS accidentvisionai.coords_and_nearby_new;
-    CREATE TABLE accidentvisionai.coords_and_nearby_new (
+    CREATE TABLE IF NOT EXISTS accidentvisionai.coords_and_nearby_new (
         col_1 INT PRIMARY KEY,
         col_2 FLOAT,
         col_3 FLOAT,
@@ -110,6 +109,12 @@ def create_table_coords_new():
 
     # Переименовываем столбцы для соответствия структуре таблицы PostgreSQL
     output_df = output_df.rename(columns={v: k for k, v in filtered_mapping.items()})
+
+    delete_query = """
+    DELETE FROM accidentvisionai.coords_and_nearby_new
+    """
+
+    cur.execute(delete_query)
 
     # Формируем SQL запрос для вставки данных
     insert_query = sql.SQL("""

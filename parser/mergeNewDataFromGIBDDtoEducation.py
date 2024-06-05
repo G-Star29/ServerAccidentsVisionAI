@@ -126,9 +126,7 @@ def merge_new_data_from_GIBDD_to_Education():
 
     merged_df.rename(columns=columns_dict, inplace=True)
 
-    print("1")
-
-    print("[PARSE] Данные успешно добавлены в таблицу data_for_education_table_test и coords_and_nearby.")
+    print("[PARSE] Данные успешно добавлены в таблицу data_for_education_table и coords_and_nearby.")
 
     # Генерация "безаварийных случаев" и вставка их в таблицу data_for_education_table_test
     synthetic_non_accidents = generate_synthetic_non_accidents(merged_df)
@@ -143,7 +141,7 @@ def merge_new_data_from_GIBDD_to_Education():
     cur.close()
     conn.close()
 
-    print("[PARSE] Синтетические данные о безаварийных сценариях добавлены в таблицу data_for_education_table_test.")
+    print('[PARSE] Данные об "безаварийных" случаях добавлены в data_for_education_table')
 
 def load_data(file_path):
     return pd.read_csv(file_path)

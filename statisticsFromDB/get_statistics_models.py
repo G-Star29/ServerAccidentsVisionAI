@@ -5,6 +5,7 @@ import pandas as pd
 import psycopg2
 from pydantic import BaseModel
 
+
 class ModelData(BaseModel):
     classifier_name: str
     auc_roc_score: float
@@ -13,6 +14,7 @@ class ModelData(BaseModel):
     mean_cv_score: float
     std_cv_score: float
     date: str
+
 
 def get_model_data_from_db():
     dbname = 'accidentsvisionai'
@@ -56,5 +58,3 @@ def get_model_data_from_db():
     conn.close()
 
     return result
-
-

@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS accidentvisionai.new_indications (
     col_154 INT,
     col_155 BOOLEAN,
     coords_and_nearby INT,
-    FOREIGN KEY (coords_and_nearby) REFERENCES accidentvisionai.coords_and_nearby_new(col_1)
+    FOREIGN KEY (coords_and_nearby) REFERENCES accidentvisionai.coords_and_nearby_new(col_1) ON DELETE CASCADE 
 );
 """
 

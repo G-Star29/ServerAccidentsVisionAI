@@ -5,7 +5,6 @@ from apscheduler.triggers.interval import IntervalTrigger
 import asyncio
 import base64
 
-
 from parser.parserNewDataFromGIBDD import try_to_parse_new_data_from_gibdd
 from EducationModel.model_training import create_new_classifier
 from prepareWeather.prepare_weather import prepare_weather_for_prediction
@@ -21,7 +20,6 @@ app = FastAPI()
 origins = [
     "http://localhost:63342",
     "http://127.0.0.1:8000",
-
 ]
 
 app.add_middleware(
@@ -32,21 +30,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 async def make_prediction(data_of_current_state):
     merge_to_predictions_table(data_of_current_state, for_current_state=True)
     make_prediction_from_latest_model()
+
 
 # Асинхронная функция, которая будет выполняться каждые 5 минут
 async def scheduled_task():
     data_of_current_state = prepare_weather_for_prediction(prediction_for_current_time=True)
     await make_prediction(data_of_current_state)
-    print(f"[PREDICTION] Отключено")
 
 
 async def daily_scheduled_task():
-   # status_code = try_to_parse_new_data_from_gibdd()
-   # if not status_code:
-   #     create_new_classifier()
+    # status_code = try_to_parse_new_data_from_gibdd()
+    # if not status_code:
+    #     create_new_classifier()
     print(f"[PARSE] Обучение модели отключено")
 
 
@@ -68,13 +67,13 @@ def run_daily_async_task():
 # Настройка планировщика
 scheduler = BackgroundScheduler()
 scheduler.add_job(run_async_task, trigger=IntervalTrigger(hours=1))
-scheduler.add_job(run_daily_async_task, trigger=IntervalTrigger(minutes=1))
+scheduler.add_job(run_daily_async_task, trigger=IntervalTrigger(days=1))
 scheduler.start()
 
 
 # Запуск асинхронной задачи сразу после настройки планировщика
 async def startup_event():
-    asyncio.create_task(scheduled_task())
+    await asyncio.create_task(scheduled_task())
 
 
 @app.on_event("startup")
@@ -98,8 +97,9 @@ async def predict():
 @app.get('/next-hour-situation-{hours}', response_model=dict)
 async def predict(hours: int):
     if hours < 1:
-        raise HTTPException(status_code=400, detail="Number of hours must be at least 1")
-
+        raise HTTPException(status_code=400, detail="[CLIENT] ОШИБКА! Количество часов должно быть >= 1")
+    elif hours > 4:
+        raise HTTPException(status_code=400, detail="[CLIENT] ОШИБКА! Количество часов должно быть < 4")
     data_of_future_state = prepare_weather_for_prediction(prediction_for_current_time=False, hours=hours)
     dataFrame_for_predicion = merge_to_predictions_table(data_of_future_state, for_current_state=False)
     predictions = make_prediction_from_latest_model(for_current_state=False,
@@ -107,14 +107,17 @@ async def predict(hours: int):
     data_for_return = PrepareDataForClient(predictions)
     return data_for_return
 
+
 @app.get("/get-statistics", response_model=list[YearlyData])
 async def get_statistics():
     data_for_return = get_statistics_from_db()
     return data_for_return
 
+
 @app.get("/get-predictions-models", response_model=list[ModelData])
 async def get_statistics_models():
     return get_model_data_from_db()
+
 
 if __name__ == '__main__':
     import uvicorn

@@ -18,14 +18,14 @@ def PrepareDataForClient(data):
             coords.append([lat, lon])
             probs.append(value)
         except (ValueError, AttributeError) as e:
-            print(f"Ошибка при обработке координат {key}: {e}")
+            print(f"[OUTPUT DATA] ОШИБКА! При обработке координат {key}: {e}")
             continue
 
     coords = np.array(coords)
     probs = np.array(probs)
 
     if np.isnan(coords).any():
-        raise ValueError("Found NaN in coordinates array")
+        raise ValueError("[OUTPUT DATA] Найдено None в массиве координат")
 
     kms_per_radian = 6371.0088
     epsilon = 50 / 1000.0 / kms_per_radian

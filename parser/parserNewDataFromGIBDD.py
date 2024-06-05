@@ -5,10 +5,14 @@ import requests
 import json
 import pandas as pd
 from dateutil.relativedelta import relativedelta
+import warnings
 
 from .dataMod import mod_parsed_data
 from .createTableCoordsNew import create_table_coords_new
 from .mergeNewDataFromGIBDDtoEducation import merge_new_data_from_GIBDD_to_Education
+from .mergeDataToIndications import merge_data_to_indications
+
+warnings.filterwarnings("ignore")
 
 def get_last_date_from_db():
     dbname = 'accidentsvisionai'
@@ -204,7 +208,8 @@ def try_to_parse_new_data_from_gibdd():
     url = 'http://stat.gibdd.ru/map/getDTPCardData'
 
     data = {
-        "data": f'{{"date":["MONTHS:{new_month}.{new_year}"],"ParReg":"50","order":{{"type":"1","fieldName":"dat"}},"reg":"50401","ind":"1","st":"1","en":"16"}}'
+        "data": f'{{"date":["MONTHS:{new_month}.{new_year}"],"ParReg":"50","order":{{"type":"1","fieldName":"dat"}},'
+                f'"reg":"50401","ind":"1","st":"1","en":"16"}}'
     }
 
     response = requests.post(url, json=data)
@@ -221,8 +226,8 @@ def try_to_parse_new_data_from_gibdd():
 
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(response.json(), f, ensure_ascii=False, indent=4)
-            print('Data saved successfully.')
-            with open('data/json/response.json', 'r', encoding='utf-8') as f:
+            print('[DATA PARSE] Данные успешно сохранены в JSON.')
+            with open(filename, 'r', encoding='utf-8') as f:
                 json_data = json.load(f)
             data = json.loads(json_data["data"])
 
@@ -259,5 +264,6 @@ def try_to_parse_new_data_from_gibdd():
 
     mod_parsed_data()
     create_table_coords_new()
+    merge_data_to_indications()
     merge_new_data_from_GIBDD_to_Education()
 
